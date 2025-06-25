@@ -1,60 +1,100 @@
-import React, { useState, useEffect, Component } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import apiKeys from "./apiKeys";
 import ReactAnimatedWeather from "react-animated-weather";
 
-function Forcast(props) {
+function Forcast({ weatherData, icon, weather }) {
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
-  const [weather, setWeather] = useState({});
+  const [searchWeather, setSearchWeather] = useState(null); // Holds weather data from search functionality
+
+  // Map OpenWeatherMap icons to react-animated-weather icons
+  const getReactWeatherIcon = (owmIcon) => {
+    const mapping = {
+      "01d": "CLEAR",
+      "01n": "CLEAR",
+      "02d": "CLOUDY",
+      "02n": "CLOUDY",
+      "03d": "CLOUDY",
+      "03n": "CLOUDY",
+      "04d": "CLOUDY",
+      "04n": "CLOUDY",
+      "09d": "RAIN",
+      "09n": "RAIN",
+      "10d": "RAIN",
+      "10n": "RAIN",
+      "11d": "RAIN",
+      "11n": "RAIN",
+      "13d": "SNOW",
+      "13n": "SNOW",
+      "50d": "FOG",
+      "50n": "FOG",
+    };
+
+    return mapping[owmIcon] || "CLEAR_DAY"; // Default to CLEAR_DAY if no match
+  };
 
   const search = (city) => {
     axios
       .get(
         `${apiKeys.base}weather?q=${
-          city != "[object Object]" ? city : query
+          city || query
         }&units=metric&APPID=${apiKeys.key}`
       )
       .then((response) => {
-        setWeather(response.data);
+        setSearchWeather(response.data);
         setQuery("");
+        setError("");
+        // Save city and country to localStorage
+        const cityData = {
+          city: response.data.name,
+          country: response.data.sys.country,
+        };
+        localStorage.setItem("selectedCity", JSON.stringify(cityData));
+        window.dispatchEvent(new CustomEvent("cityChanged", { detail: cityData }));
       })
-      .catch(function (error) {
-        console.log(error);
-        setWeather("");
-        setQuery("");
-        setError({ message: "Not Found", query: query });
+      .catch((err) => {
+        console.error(err);
+        setSearchWeather(null);
+        setError({ message: "City not found", query: city || query });
       });
   };
-  function checkTime(i) {
-    if (i < 10) {
-      i = "0" + i;
-    } // add zero in front of numbers < 10
-    return i;
-  }
+
+  useEffect(() => {
+    if (!weatherData) {
+      // Default city search (if no props provided)
+      search("Delhi");
+    }
+  }, [weatherData]);
 
   const defaults = {
     color: "white",
     size: 112,
     animate: true,
   };
+  const handleKeyPress = (e) => {
+    // Trigger search when Enter is pressed
+    if (e.key === 'Enter') {
+      search(query);
+    }
+  };
 
-  useEffect(() => {
-    search("Delhi");
-  }, []);
+  const displayWeather = searchWeather || weatherData; // Use searched weather data if available, otherwise use props
 
   return (
     <div className="forecast">
       <div className="forecast-icon">
-        <ReactAnimatedWeather
-          icon={props.icon}
-          color={defaults.color}
-          size={defaults.size}
-          animate={defaults.animate}
-        />
+        {displayWeather && displayWeather.weather[0] && (
+          <ReactAnimatedWeather
+            icon={getReactWeatherIcon(displayWeather.weather[0].icon)}
+            color={defaults.color}
+            size={defaults.size}
+            animate={defaults.animate}
+          />
+        )}
       </div>
       <div className="today-weather">
-        <h3>{props.weather}</h3>
+        <h3>{weather || (displayWeather && displayWeather.weather[0].main)}</h3>
         <div className="search-box">
           <input
             type="text"
@@ -64,54 +104,51 @@ function Forcast(props) {
             value={query}
           />
           <div className="img-box">
-            {" "}
             <img
               src="https://images.avishkaar.cc/workflow/newhp/search-white.png"
-              onClick={search}
+              alt="search"
+              onKeyDown={handleKeyPress}
+              onClick={() => search(query)}
             />
           </div>
         </div>
         <ul>
-          {typeof weather.main != "undefined" ? (
+          {displayWeather ? (
             <div>
-              {" "}
               <li className="cityHead">
                 <p>
-                  {weather.name}, {weather.sys.country}
+                  {displayWeather.name}, {displayWeather.sys.country}
                 </p>
                 <img
                   className="temp"
-                  src={`https://openweathermap.org/img/wn/${weather.weather[0].icon}.png`}
+                  src={`https://openweathermap.org/img/w/${displayWeather.weather[0].icon}.png`}
+                  alt="weather-icon"
                 />
               </li>
               <li>
                 Temperature{" "}
                 <span className="temp">
-                  {Math.round(weather.main.temp)}°c ({weather.weather[0].main})
+                  {Math.round(displayWeather.main.temp)}°C
                 </span>
               </li>
               <li>
                 Humidity{" "}
-                <span className="temp">
-                  {Math.round(weather.main.humidity)}%
-                </span>
+                <span className="temp">{Math.round(displayWeather.main.humidity)}%</span>
               </li>
               <li>
                 Visibility{" "}
                 <span className="temp">
-                  {Math.round(weather.visibility)} mi
+                  {Math.round(displayWeather.visibility / 1000)} km
                 </span>
               </li>
               <li>
                 Wind Speed{" "}
-                <span className="temp">
-                  {Math.round(weather.wind.speed)} Km/h
-                </span>
+                <span className="temp">{Math.round(displayWeather.wind.speed)} km/h</span>
               </li>
             </div>
           ) : (
             <li>
-              {error.query} {error.message}
+              {error.query} - {error.message}
             </li>
           )}
         </ul>
@@ -119,4 +156,5 @@ function Forcast(props) {
     </div>
   );
 }
+
 export default Forcast;
